@@ -1,0 +1,1 @@
+A simple counter application with a beautiful dark theme, using a Floating Action Button to increment the counter and a text display in the center of the screen showing the current count.
