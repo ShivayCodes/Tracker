@@ -185,8 +185,8 @@ public class Main {
 
     private void updateTarget() {
         Vector3f pos = camera.getPosition(); Vector3f dir = new Vector3f(); float yaw = (float) Math.toRadians(camera.getRotation().y), pitch = (float) Math.toRadians(camera.getRotation().x);
-        dir.x = (float) (Math.sin(yaw) * Math.cos(pitch) * -1.0f); dir.y = (float) Math.sin(-pitch); dir.z = (float) (Math.cos(yaw) * Math.cos(pitch) * -1.0f); dir.normalize();
-        float step = 0.1f; Vector3f currentPos = new Vector3f(pos.x, pos.y, pos.z); Vector3f lastAirPos = new Vector3f(currentPos); targetBlock = null; targetAirBlock = null; targetEntity = null;
+        dir.x = (float) (Math.sin(yaw) * Math.cos(pitch)); dir.y = (float) Math.sin(-pitch); dir.z = (float) (Math.cos(yaw) * Math.cos(pitch) * -1.0f); dir.normalize();
+        float step = 0.05f; Vector3f currentPos = new Vector3f(pos.x, pos.y, pos.z); Vector3f lastAirPos = new Vector3f(currentPos); targetBlock = null; targetAirBlock = null; targetEntity = null;
         for (float i = 0; i < 5.0f; i += step) {
             currentPos.add(dir.x * step, dir.y * step, dir.z * step);
             for (com.game.entity.Entity e : world.getEntities()) { if (currentPos.distance(e.getPosition()) < 0.8f) { targetEntity = e; return; } }
