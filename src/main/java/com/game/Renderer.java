@@ -2,6 +2,7 @@ package com.game;
 
 import com.game.world.Chunk;
 import com.game.world.World;
+import com.game.entity.Entity;
 import org.joml.Matrix4f;
 
 import static org.lwjgl.opengl.GL11.*;
@@ -54,6 +55,21 @@ public class Renderer {
         for (Chunk chunk : world.getChunks()) {
             Mesh mesh = chunk.getMesh();
             if (mesh != null) {
+                mesh.render();
+            }
+        }
+
+        // Render entities
+        for (Entity entity : world.getEntities()) {
+            Mesh mesh = entity.getMesh();
+            if (mesh != null) {
+                modelMatrix.identity()
+                    .translate(entity.getPosition())
+                    .rotateX((float) Math.toRadians(entity.getRotation().x))
+                    .rotateY((float) Math.toRadians(entity.getRotation().y))
+                    .rotateZ((float) Math.toRadians(entity.getRotation().z))
+                    .scale(entity.getScale());
+                shaderProgram.setUniform("model", modelMatrix);
                 mesh.render();
             }
         }

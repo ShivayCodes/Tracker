@@ -1,21 +1,40 @@
 package com.game.world;
 
+import com.game.entity.Entity;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.joml.Vector3f;
 
 public class World {
 
     private final Map<String, Chunk> chunks;
+    private final List<Entity> entities;
 
     public World() {
         chunks = new HashMap<>();
+        entities = new ArrayList<>();
         // Generate a 4x4 chunk area
         for (int x = -2; x < 2; x++) {
             for (int z = -2; z < 2; z++) {
                 Chunk chunk = new Chunk(x, z);
                 chunks.put(x + "," + z, chunk);
             }
+        }
+    }
+
+    public List<Entity> getEntities() {
+        return entities;
+    }
+
+    public void addEntity(Entity e) {
+        entities.add(e);
+    }
+
+    public void update(float deltaTime) {
+        for (Entity e : entities) {
+            e.update(deltaTime);
         }
     }
 

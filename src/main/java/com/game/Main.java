@@ -126,6 +126,25 @@ public class Main {
 
         world = new World();
         atlas = new Texture("src/main/resources/textures/atlas.png");
+
+        float u0 = 0.0f, u1 = 1.0f/3.0f;
+        float v0 = 0.0f, v1 = 1.0f;
+        float[] positions = new float[]{
+            -0.5f,  0.5f,  0.5f, -0.5f, -0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f,  0.5f,  0.5f,
+            -0.5f,  0.5f, -0.5f,  0.5f,  0.5f, -0.5f, -0.5f, -0.5f, -0.5f,  0.5f, -0.5f, -0.5f,
+        };
+        float[] textCoords = new float[]{
+            u0, v0, u0, v1, u1, v1, u1, v0,
+            u0, v0, u0, v1, u1, v1, u1, v0
+        };
+        int[] indices = new int[]{
+            0, 1, 3, 3, 1, 2, 4, 0, 3, 5, 4, 3, 3, 2, 7, 5, 3, 7,
+            6, 1, 0, 6, 0, 4, 2, 1, 6, 2, 6, 7, 7, 6, 4, 7, 4, 5,
+        };
+        Mesh entityMesh = new Mesh(positions, textCoords, indices);
+        com.game.entity.Entity companion = new com.game.entity.Entity(entityMesh);
+        companion.setPosition(0, 15, -5);
+        world.addEntity(companion);
     }
 
     private void loop() {
@@ -140,6 +159,7 @@ public class Main {
                 input(deltaTime);
                 physics(deltaTime);
             }
+            world.update(deltaTime);
 
             renderer.render(world, camera, width, height, atlas);
 
