@@ -1,0 +1,57 @@
+package com.game;
+
+import org.joml.Matrix4f;
+
+import static org.lwjgl.opengl.GL11.*;
+
+public class Renderer {
+
+    private static final float FOV = (float) Math.toRadians(60.0f);
+    private static final float Z_NEAR = 0.01f;
+    private static final float Z_FAR = 1000.f;
+
+    private ShaderProgram shaderProgram;
+
+    public void init() throws Exception {
+        shaderProgram = new ShaderProgram();
+        shaderProgram.createVertexShader(Utils.loadResource("/shaders/vertex.glsl"));
+        shaderProgram.createFragmentShader(Utils.loadResource("/shaders/fragment.glsl"));
+        shaderProgram.link();
+
+        shaderProgram.createUniform("projection");
+        shaderProgram.createUniform("model");
+        shaderProgram.createUniform("view");
+    }
+
+    public void clear() {
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
+
+    public void render(Mesh mesh, Camera camera, int width, int height) {
+        clear();
+
+        if (width == 0 || height == 0) return;
+
+        shaderProgram.bind();
+
+        Matrix4f projectionMatrix = camera.getProjectionMatrix(FOV, width, height, Z_NEAR, Z_FAR);
+        shaderProgram.setUniform("projection", projectionMatrix);
+
+        Matrix4f viewMatrix = camera.getViewMatrix();
+        shaderProgram.setUniform("view", viewMatrix);
+
+        // For now, render the mesh at origin
+        Matrix4f modelMatrix = new Matrix4f().identity();
+        shaderProgram.setUniform("model", modelMatrix);
+
+        mesh.render();
+
+        shaderProgram.unbind();
+    }
+
+    public void cleanup() {
+        if (shaderProgram != null) {
+            shaderProgram.cleanup();
+        }
+    }
+}
