@@ -1,8 +1,11 @@
 package com.game;
 
+import com.game.world.Chunk;
+import com.game.world.World;
 import org.joml.Matrix4f;
 
 import static org.lwjgl.opengl.GL11.*;
+import static org.lwjgl.opengl.GL13.*;
 
 public class Renderer {
 
@@ -21,13 +24,14 @@ public class Renderer {
         shaderProgram.createUniform("projection");
         shaderProgram.createUniform("model");
         shaderProgram.createUniform("view");
+        shaderProgram.createUniform("texture_sampler");
     }
 
     public void clear() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
-    public void render(Mesh mesh, Camera camera, int width, int height) {
+    public void render(World world, Camera camera, int width, int height, com.game.graphics.Texture texture) {
         clear();
 
         if (width == 0 || height == 0) return;
@@ -40,11 +44,19 @@ public class Renderer {
         Matrix4f viewMatrix = camera.getViewMatrix();
         shaderProgram.setUniform("view", viewMatrix);
 
-        // For now, render the mesh at origin
+        shaderProgram.setUniform("texture_sampler", 0);
+        glActiveTexture(GL_TEXTURE0);
+        texture.bind();
+
         Matrix4f modelMatrix = new Matrix4f().identity();
         shaderProgram.setUniform("model", modelMatrix);
 
-        mesh.render();
+        for (Chunk chunk : world.getChunks()) {
+            Mesh mesh = chunk.getMesh();
+            if (mesh != null) {
+                mesh.render();
+            }
+        }
 
         shaderProgram.unbind();
     }

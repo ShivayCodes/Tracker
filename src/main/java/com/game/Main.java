@@ -1,6 +1,8 @@
 package com.game;
 
-import org.lwjgl.*;
+import com.game.graphics.Texture;
+import com.game.world.World;
+import org.joml.Vector3f;
 import org.lwjgl.glfw.*;
 import org.lwjgl.opengl.*;
 import org.lwjgl.system.*;
@@ -18,13 +20,17 @@ public class Main {
     private long window;
     private Renderer renderer;
     private Camera camera;
-    private Mesh mesh;
+    private World world;
+    private Texture atlas;
     private int width = 800;
     private int height = 600;
 
-    public void run() {
-        System.out.println("Hello LWJGL " + Version.getVersion() + "!");
+    private boolean mouseLocked = true;
+    private double lastMouseX, lastMouseY;
+    private float velocityY = 0;
+    private boolean isGrounded = false;
 
+    public void run() {
         try {
             init();
             loop();
@@ -38,102 +44,88 @@ public class Main {
     private void init() throws Exception {
         GLFWErrorCallback.createPrint(System.err).set();
 
-        if ( !glfwInit() )
-            throw new IllegalStateException("Unable to initialize GLFW");
+        if ( !glfwInit() ) throw new IllegalStateException("Unable to initialize GLFW");
 
         glfwDefaultWindowHints();
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
         window = glfwCreateWindow(width, height, "Minecraft Clone (LWJGL3)", NULL, NULL);
-        if ( window == NULL )
-            throw new RuntimeException("Failed to create the GLFW window");
+        if ( window == NULL ) throw new RuntimeException("Failed to create the GLFW window");
 
-        glfwSetFramebufferSizeCallback(window, (window, w, h) -> {
+        glfwSetFramebufferSizeCallback(window, (wnd, w, h) -> {
             width = w;
             height = h;
             glViewport(0, 0, width, height);
         });
 
-        glfwSetKeyCallback(window, (window, key, scancode, action, mods) -> {
+        glfwSetKeyCallback(window, (wnd, key, scancode, action, mods) -> {
             if ( key == GLFW_KEY_ESCAPE && action == GLFW_RELEASE ) {
-                glfwSetWindowShouldClose(window, true);
+                mouseLocked = !mouseLocked;
+                glfwSetInputMode(window, GLFW_CURSOR, mouseLocked ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+            }
+            if ( key == GLFW_KEY_SPACE && action == GLFW_PRESS && isGrounded) {
+                velocityY = 6.0f; // Jump
+                isGrounded = false;
             }
         });
 
-        try ( MemoryStack stack = stackPush() ) {
-            IntBuffer pWidth = stack.mallocInt(1);
-            IntBuffer pHeight = stack.mallocInt(1);
+        glfwSetMouseButtonCallback(window, (wnd, button, action, mods) -> {
+            if (action == GLFW_PRESS && mouseLocked) {
+                if (button == GLFW_MOUSE_BUTTON_LEFT) {
+                    interactBlock(true); // Break
+                } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+                    interactBlock(false); // Place
+                }
+            } else if (action == GLFW_PRESS && !mouseLocked) {
+                mouseLocked = true;
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            }
+        });
 
-            glfwGetWindowSize(window, pWidth, pHeight);
-            GLFWVidMode vidmode = glfwGetVideoMode(glfwGetPrimaryMonitor());
-
-            glfwSetWindowPos(
-                window,
-                (vidmode.width() - pWidth.get(0)) / 2,
-                (vidmode.height() - pHeight.get(0)) / 2
-            );
-        }
+        glfwSetCursorPosCallback(window, (wnd, xpos, ypos) -> {
+            if (mouseLocked) {
+                double dx = xpos - lastMouseX;
+                double dy = ypos - lastMouseY;
+                camera.moveRotation((float) dy * 0.1f, (float) dx * 0.1f, 0);
+                
+                // Clamp pitch
+                Vector3f rot = camera.getRotation();
+                if (rot.x > 89.0f) rot.x = 89.0f;
+                if (rot.x < -89.0f) rot.x = -89.0f;
+            }
+            lastMouseX = xpos;
+            lastMouseY = ypos;
+        });
 
         glfwMakeContextCurrent(window);
-        glfwSwapInterval(1); // v-sync
+        glfwSwapInterval(1);
         glfwShowWindow(window);
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+        try ( MemoryStack stack = stackPush() ) {
+            DoubleBuffer x = stack.mallocDouble(1);
+            DoubleBuffer y = stack.mallocDouble(1);
+            glfwGetCursorPos(window, x, y);
+            lastMouseX = x.get();
+            lastMouseY = y.get();
+        }
 
         GL.createCapabilities();
         
         glEnable(GL_DEPTH_TEST);
-        glClearColor(0.529f, 0.808f, 0.922f, 0.0f);
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+        glClearColor(0.529f, 0.808f, 0.922f, 1.0f);
 
         renderer = new Renderer();
         renderer.init();
 
         camera = new Camera();
-        camera.setPosition(0, 0, 5); // move back a bit to see the cube
+        camera.setPosition(0, 20, 0);
 
-        // Define a cube
-        float[] positions = new float[]{
-            // V0
-            -0.5f,  0.5f,  0.5f,
-            // V1
-            -0.5f, -0.5f,  0.5f,
-            // V2
-             0.5f, -0.5f,  0.5f,
-            // V3
-             0.5f,  0.5f,  0.5f,
-            // V4
-            -0.5f,  0.5f, -0.5f,
-            // V5
-             0.5f,  0.5f, -0.5f,
-            // V6
-            -0.5f, -0.5f, -0.5f,
-            // V7
-             0.5f, -0.5f, -0.5f,
-        };
-        float[] colors = new float[]{
-            0.5f, 0.0f, 0.0f,
-            0.0f, 0.5f, 0.0f,
-            0.0f, 0.0f, 0.5f,
-            0.0f, 0.5f, 0.5f,
-            0.5f, 0.0f, 0.0f,
-            0.0f, 0.5f, 0.0f,
-            0.0f, 0.0f, 0.5f,
-            0.0f, 0.5f, 0.5f,
-        };
-        int[] indices = new int[]{
-            // Front face
-            0, 1, 3, 3, 1, 2,
-            // Top Face
-            4, 0, 3, 5, 4, 3,
-            // Right face
-            3, 2, 7, 5, 3, 7,
-            // Left face
-            6, 1, 0, 6, 0, 4,
-            // Bottom face
-            2, 1, 6, 2, 6, 7,
-            // Back face
-            7, 6, 4, 7, 4, 5,
-        };
-        mesh = new Mesh(positions, colors, indices);
+        world = new World();
+        atlas = new Texture("src/main/resources/textures/atlas.png");
     }
 
     private void loop() {
@@ -144,8 +136,12 @@ public class Main {
             float deltaTime = (float) (currentTime - lastTime);
             lastTime = currentTime;
 
-            input(deltaTime);
-            renderer.render(mesh, camera, width, height);
+            if (mouseLocked) {
+                input(deltaTime);
+                physics(deltaTime);
+            }
+
+            renderer.render(world, camera, width, height, atlas);
 
             glfwSwapBuffers(window);
             glfwPollEvents();
@@ -153,26 +149,100 @@ public class Main {
     }
 
     private void input(float deltaTime) {
-        float speed = 2.0f * deltaTime;
+        float speed = 5.0f * deltaTime;
+        Vector3f pos = camera.getPosition();
+        Vector3f newPos = new Vector3f(pos);
+
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-            camera.movePosition(0, 0, -speed);
+            newPos.x += (float) Math.sin(Math.toRadians(camera.getRotation().y)) * -1.0f * -speed;
+            newPos.z += (float) Math.cos(Math.toRadians(camera.getRotation().y)) * -speed;
         }
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-            camera.movePosition(0, 0, speed);
+            newPos.x += (float) Math.sin(Math.toRadians(camera.getRotation().y)) * -1.0f * speed;
+            newPos.z += (float) Math.cos(Math.toRadians(camera.getRotation().y)) * speed;
         }
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-            camera.movePosition(-speed, 0, 0);
+            newPos.x += (float) Math.sin(Math.toRadians(camera.getRotation().y - 90)) * -1.0f * -speed;
+            newPos.z += (float) Math.cos(Math.toRadians(camera.getRotation().y - 90)) * -speed;
         }
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-            camera.movePosition(speed, 0, 0);
+            newPos.x += (float) Math.sin(Math.toRadians(camera.getRotation().y - 90)) * -1.0f * speed;
+            newPos.z += (float) Math.cos(Math.toRadians(camera.getRotation().y - 90)) * speed;
         }
-        // Basic rotation for demo
-        camera.moveRotation(0, 50.0f * deltaTime, 0);
+
+        // Horizontal collision
+        Vector3f testPos = new Vector3f(newPos.x, pos.y, pos.z);
+        if (!world.checkCollision(testPos)) pos.x = newPos.x;
+        
+        testPos = new Vector3f(pos.x, pos.y, newPos.z);
+        if (!world.checkCollision(testPos)) pos.z = newPos.z;
+    }
+
+    private void physics(float deltaTime) {
+        Vector3f pos = camera.getPosition();
+        
+        velocityY -= 15.0f * deltaTime; // Gravity
+        
+        Vector3f nextPos = new Vector3f(pos.x, pos.y + velocityY * deltaTime, pos.z);
+        
+        if (world.checkCollision(nextPos)) {
+            if (velocityY < 0) {
+                isGrounded = true;
+            }
+            velocityY = 0;
+        } else {
+            pos.y = nextPos.y;
+            isGrounded = false;
+        }
+        
+        if (pos.y < -10) {
+            pos.y = 20; // reset if fall off map
+            velocityY = 0;
+        }
+    }
+
+    private void interactBlock(boolean isBreak) {
+        Vector3f pos = camera.getPosition();
+        Vector3f dir = new Vector3f();
+        
+        float yaw = (float) Math.toRadians(camera.getRotation().y);
+        float pitch = (float) Math.toRadians(camera.getRotation().x);
+        
+        dir.x = (float) (Math.sin(yaw) * Math.cos(pitch) * -1.0f);
+        dir.y = (float) Math.sin(-pitch);
+        dir.z = (float) (Math.cos(yaw) * Math.cos(pitch) * -1.0f);
+        
+        dir.normalize();
+        
+        float step = 0.1f;
+        Vector3f currentPos = new Vector3f(pos.x, pos.y, pos.z);
+        Vector3f lastAirPos = new Vector3f(currentPos);
+        
+        for (float i = 0; i < 5.0f; i += step) {
+            currentPos.add(dir.x * step, dir.y * step, dir.z * step);
+            int bx = (int) Math.floor(currentPos.x);
+            int by = (int) Math.floor(currentPos.y);
+            int bz = (int) Math.floor(currentPos.z);
+            
+            if (world.getBlock(bx, by, bz) != 0) {
+                if (isBreak) {
+                    world.setBlock(bx, by, bz, (byte) 0);
+                } else {
+                    int lx = (int) Math.floor(lastAirPos.x);
+                    int ly = (int) Math.floor(lastAirPos.y);
+                    int lz = (int) Math.floor(lastAirPos.z);
+                    world.setBlock(lx, ly, lz, (byte) 3); // Place Stone
+                }
+                break;
+            }
+            lastAirPos.set(currentPos);
+        }
     }
 
     private void cleanup() {
         if (renderer != null) renderer.cleanup();
-        if (mesh != null) mesh.cleanup();
+        if (world != null) world.cleanup();
+        if (atlas != null) atlas.cleanup();
 
         glfwFreeCallbacks(window);
         glfwDestroyWindow(window);
