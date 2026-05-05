@@ -34,6 +34,9 @@ public class Renderer {
         shaderProgram.createUniform("model");
         shaderProgram.createUniform("view");
         shaderProgram.createUniform("texture_sampler");
+        shaderProgram.createUniform("sunDirection");
+        shaderProgram.createUniform("ambientLight");
+        shaderProgram.createUniform("skyColor");
 
         wireframeShader = new ShaderProgram();
         wireframeShader.createVertexShader(Utils.loadResource("/shaders/wireframe_vertex.glsl"));
@@ -69,7 +72,7 @@ public class Renderer {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
-    public void render(World world, Camera camera, int width, int height, com.game.graphics.Texture texture, Vector3f targetBlock) {
+    public void render(World world, Camera camera, int width, int height, com.game.graphics.Texture texture, Vector3f targetBlock, Vector3f sunDirection, Vector3f ambientLight, Vector3f skyColor) {
         clear();
 
         if (width == 0 || height == 0) return;
@@ -83,6 +86,10 @@ public class Renderer {
         shaderProgram.setUniform("view", viewMatrix);
 
         shaderProgram.setUniform("texture_sampler", 0);
+        shaderProgram.setUniform("sunDirection", sunDirection);
+        shaderProgram.setUniform("ambientLight", ambientLight);
+        shaderProgram.setUniform("skyColor", skyColor);
+        
         glActiveTexture(GL_TEXTURE0);
         texture.bind();
 

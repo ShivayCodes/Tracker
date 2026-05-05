@@ -37,6 +37,12 @@ public class Main {
     private Vector3f targetAirBlock = null;
     private com.game.entity.Entity targetEntity = null;
     private int selectedSlot = 0; // 0 to 8
+    
+    private float time = 0.0f;
+    private static final int RENDER_DISTANCE = 4;
+    
+    private float bobbingTime = 0;
+    private boolean isMoving = false;
 
     public void run() {
         try {
@@ -119,7 +125,7 @@ public class Main {
             DoubleBuffer y = stack.mallocDouble(1);
             glfwGetCursorPos(window, x, y);
             lastMouseX = x.get();
-            lastMouseY = y.get();
+            lastMouseY = x.get();
         }
 
         GL.createCapabilities();
@@ -142,6 +148,7 @@ public class Main {
         atlas = new Texture("src/main/resources/textures/atlas.png");
         hudTexture = new Texture("src/main/resources/textures/hud.png");
 
+        // Entity dummy mesh with AO values (all 1.0)
         float u0 = 0.0f, u1 = 1.0f/3.0f;
         float v0 = 0.0f, v1 = 1.0f;
         float[] positions = new float[]{
@@ -152,11 +159,13 @@ public class Main {
             u0, v0, u0, v1, u1, v1, u1, v0,
             u0, v0, u0, v1, u1, v1, u1, v0
         };
+        float[] ao = new float[8];
+        for(int i=0; i<8; i++) ao[i] = 1.0f;
         int[] indices = new int[]{
             0, 1, 3, 3, 1, 2, 4, 0, 3, 5, 4, 3, 3, 2, 7, 5, 3, 7,
             6, 1, 0, 6, 0, 4, 2, 1, 6, 2, 6, 7, 7, 6, 4, 7, 4, 5,
         };
-        Mesh entityMesh = new Mesh(positions, textCoords, indices);
+        Mesh entityMesh = new Mesh(positions, textCoords, new float[24], ao, indices);
         com.game.entity.Entity companion = new com.game.entity.Entity(entityMesh);
         companion.setPosition(0, 15, -5);
         world.addEntity(companion);
@@ -176,8 +185,39 @@ public class Main {
                 updateTarget();
             }
             world.update(deltaTime);
+            world.updateChunks(camera.getPosition(), RENDER_DISTANCE);
 
-            renderer.render(world, camera, width, height, atlas, targetBlock);
+            // Day/Night logic
+            time += deltaTime * 0.05f; 
+            if (time > Math.PI * 2) time -= Math.PI * 2;
+
+            Vector3f sunDirection = new Vector3f((float)Math.sin(time), (float)Math.cos(time), 0.5f).normalize();
+            float sunHeight = sunDirection.y;
+            
+            // Sky color
+            float skyFactor = Math.max(sunHeight, -0.2f) + 0.2f;
+            skyFactor = Math.min(skyFactor, 1.0f);
+            Vector3f skyColor = new Vector3f(0.529f, 0.808f, 0.922f).mul(skyFactor);
+            glClearColor(skyColor.x, skyColor.y, skyColor.z, 1.0f);
+
+            // Ambient light
+            float ambientFactor = Math.max(sunHeight, 0.1f);
+            Vector3f ambientLight = new Vector3f(ambientFactor, ambientFactor, ambientFactor);
+
+            // View Bobbing
+            if (isMoving && isGrounded) {
+                bobbingTime += deltaTime * 12.0f;
+            } else {
+                bobbingTime = 0;
+            }
+            float bobOffset = (float) Math.sin(bobbingTime) * 0.05f;
+            Vector3f originalPos = new Vector3f(camera.getPosition());
+            camera.getPosition().y += bobOffset;
+
+            renderer.render(world, camera, width, height, atlas, targetBlock, sunDirection, ambientLight, skyColor);
+            
+            camera.setPosition(originalPos.x, originalPos.y, originalPos.z); // Restore
+            
             hudRenderer.render(width, height, hudTexture, selectedSlot);
 
             glfwSwapBuffers(window);
@@ -189,22 +229,27 @@ public class Main {
         float speed = 5.0f * deltaTime;
         Vector3f pos = camera.getPosition();
         Vector3f newPos = new Vector3f(pos);
+        isMoving = false;
 
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
             newPos.x += (float) Math.sin(Math.toRadians(camera.getRotation().y)) * -1.0f * -speed;
             newPos.z += (float) Math.cos(Math.toRadians(camera.getRotation().y)) * -speed;
+            isMoving = true;
         }
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
             newPos.x += (float) Math.sin(Math.toRadians(camera.getRotation().y)) * -1.0f * speed;
             newPos.z += (float) Math.cos(Math.toRadians(camera.getRotation().y)) * speed;
+            isMoving = true;
         }
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
             newPos.x += (float) Math.sin(Math.toRadians(camera.getRotation().y - 90)) * -1.0f * -speed;
             newPos.z += (float) Math.cos(Math.toRadians(camera.getRotation().y - 90)) * -speed;
+            isMoving = true;
         }
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
             newPos.x += (float) Math.sin(Math.toRadians(camera.getRotation().y - 90)) * -1.0f * speed;
             newPos.z += (float) Math.cos(Math.toRadians(camera.getRotation().y - 90)) * speed;
+            isMoving = true;
         }
 
         Vector3f testPos = new Vector3f(newPos.x, pos.y, pos.z);
@@ -217,7 +262,7 @@ public class Main {
     private void physics(float deltaTime) {
         Vector3f pos = camera.getPosition();
         
-        velocityY -= 15.0f * deltaTime; // Gravity
+        velocityY -= 15.0f * deltaTime; 
         Vector3f nextPos = new Vector3f(pos.x, pos.y + velocityY * deltaTime, pos.z);
         
         if (world.checkCollision(nextPos)) {
@@ -229,7 +274,7 @@ public class Main {
         }
         
         if (pos.y < -10) {
-            pos.y = 20; // reset
+            pos.y = 20; 
             velocityY = 0;
         }
     }
@@ -257,15 +302,13 @@ public class Main {
         for (float i = 0; i < 5.0f; i += step) {
             currentPos.add(dir.x * step, dir.y * step, dir.z * step);
             
-            // Check entities
             for (com.game.entity.Entity e : world.getEntities()) {
                 if (currentPos.distance(e.getPosition()) < 0.8f) {
                     targetEntity = e;
-                    return; // Hit entity first
+                    return; 
                 }
             }
 
-            // Check blocks
             int bx = (int) Math.floor(currentPos.x);
             int by = (int) Math.floor(currentPos.y);
             int bz = (int) Math.floor(currentPos.z);
@@ -281,7 +324,6 @@ public class Main {
 
     private void interact(boolean isBreak) {
         if (targetEntity != null && isBreak) {
-            // Remove entity
             world.getEntities().remove(targetEntity);
             targetEntity = null;
             return;
@@ -291,11 +333,10 @@ public class Main {
             if (isBreak) {
                 world.setBlock((int)targetBlock.x, (int)targetBlock.y, (int)targetBlock.z, (byte) 0);
             } else if (targetAirBlock != null) {
-                // Determine block type based on selected hotbar slot (Slot 0=Dirt, 1=Grass, 2=Stone)
-                byte blockType = 3; // Default Stone
-                if (selectedSlot == 0) blockType = 1; // Dirt
-                if (selectedSlot == 1) blockType = 2; // Grass
-                if (selectedSlot == 2) blockType = 3; // Stone
+                byte blockType = 3; 
+                if (selectedSlot == 0) blockType = 1; 
+                if (selectedSlot == 1) blockType = 2; 
+                if (selectedSlot == 2) blockType = 3; 
                 
                 world.setBlock((int)targetAirBlock.x, (int)targetAirBlock.y, (int)targetAirBlock.z, blockType);
             }
